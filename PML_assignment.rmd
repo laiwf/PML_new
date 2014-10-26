@@ -1,0 +1,73 @@
+---
+title: "PML Assignment: Prediction Writeup"
+keep_md: yes
+---
+
+## Load library and set seed
+We load the library and set seed.
+```{r, message=FALSE}
+library(caret)
+library(doParallel)
+set.seed(123)
+```
+
+## Read and clean data
+We read data from the csv files. Note there is header in both file.
+```{r}
+train_raw <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA", ""))
+test_raw <- read.csv("pml-testing.csv", header = TRUE, na.strings = c("NA", ""))
+```
+
+Next clean the data. Remove NA value. Remove unwanted columns.
+```{r}
+train_clean <- train_raw[, (colSums(is.na(train_raw)) == 0)]
+test_clean <- test_raw[, (colSums(is.na(test_raw)) == 0)]
+train_clean_r <- train_clean[,-(1:7)]
+test_clean_r <- test_clean[,-(1:7)]
+```
+
+## Model Building
+We split the dataset into 70% training dataset and 30% validation.
+```{r}
+inTrain = createDataPartition(train_clean_r$classe, p=.7, list = FALSE)
+training = train_clean_r[inTrain,]
+testing = train_clean_r[-inTrain,]
+```
+
+## PCA
+We might not need every predictor. Apply PCA (exclude classe in this).
+```{r}
+preProc <- preProcess(training[, -53], method = "pca")
+trainPreP <- predict(preProc, training[, -53])
+testPreP <- predict(preProc, testing[, -53])
+```
+
+## Train model
+We train the model using random forest with ntree and mtry fixed after trial & error (considering runtime versus accuracy).
+```{r, message=FALSE}
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+modelFit <- train(training$classe ~ ., method = "rf", data = trainPreP,ntree=100, tuneGrid=data.frame(mtry=2))
+stopCluster(cl)
+```
+
+## Cross Validation
+We apply the train model to cross validation set. We view result using confusionMatrix. 
+```{r}
+pred_VRF <- predict(modelFit, testPreP)
+confusionMatrix(testing$classe, pred_VRF)
+```
+Expected Out of sample error is 1-Accuracy, which is **0.0274**.
+
+## Predicted results
+We preprocessed the original testing set and also removed the "problem_id" column.
+Running our model with test data and we get the predicted results
+```{r}
+testFinal <- predict(preProc, test_clean_r[, -53])
+predfinal <- predict(modelFit, testFinal)
+predfinal
+```
+
+
+
+
